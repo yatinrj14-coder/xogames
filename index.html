@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Load Phosphor Icons for UI elements -->
     <script src="https://unpkg.com/@phosphor-icons/web@2.1.1/dist/index.umd.js"></script>
+    
+    <!-- STYLES.CSS Logic (Internalized) -->
     <style>
         /* Custom styles for the board and mobile layout */
         #game-board {
@@ -57,7 +59,8 @@
 </head>
 <body class="bg-gray-900 text-white min-h-screen p-4 font-sans flex items-center justify-center">
 
-    <div id="app" class="w-full max-w-4xl space-y-6">
+    <!-- Increased max-width for better laptop layout -->
+    <div id="app" class="w-full max-w-6xl space-y-6"> 
         <header class="text-center mb-6">
             <h1 class="text-4xl font-extrabold text-indigo-400">Online X-O (Tic-Tac-Toe)</h1>
             <p id="user-info" class="text-sm text-gray-400 mt-2"></p>
@@ -69,8 +72,8 @@
             <!-- 1. Video and Game Board Container -->
             <div class="lg:w-2/3 flex flex-col gap-4">
                 
-                <!-- Video Feeds -->
-                <div id="video-feeds" class="flex gap-4 h-48 sm:h-64">
+                <!-- Video Feeds - Visibility controlled by JS based on mode -->
+                <div id="video-feeds" class="flex gap-4 h-48 sm:h-64 hidden">
                     <div class="flex-1 bg-gray-800 rounded-xl shadow-lg p-2 relative">
                         <video id="local-video" class="video-feed" autoplay playsinline muted></video>
                         <span class="absolute top-2 left-3 text-xs bg-indigo-500 px-2 py-0.5 rounded-full">You</span>
@@ -110,7 +113,17 @@
                 <div id="game-setup-controls" class="space-y-3">
                     <h2 class="text-xl font-semibold border-b border-gray-700 pb-2 text-indigo-300">Start a Game</h2>
                     
-                    <!-- NEW: Play with Robot Button -->
+                    <!-- Difficulty Selector -->
+                    <div class="space-y-2">
+                        <label for="robot-level" class="block text-gray-300 font-medium">Robot Difficulty:</label>
+                        <select id="robot-level" class="w-full p-3 rounded-lg bg-gray-700 text-white focus:ring-2 focus:ring-fuchsia-500 focus:border-transparent">
+                            <option value="easy">Easy (Random)</option>
+                            <option value="medium" selected>Medium (Block/Center)</option>
+                            <option value="hard">Hard (Heuristic)</option>
+                        </select>
+                    </div>
+
+                    <!-- Play with Robot Button -->
                     <button id="robot-btn" class="w-full py-3 bg-fuchsia-600 hover:bg-fuchsia-500 rounded-lg font-bold transition-all shadow-md" onclick="startRobotGame()">
                         <i class="ph-robot-bold chat-control-icon align-middle mr-2"></i> Play with Robot
                     </button>
@@ -139,7 +152,7 @@
                 </div>
 
                 <!-- Video/Audio Controls -->
-                <div id="media-controls" class="space-y-3 pt-4 border-t border-gray-700">
+                <div id="media-controls" class="space-y-3 pt-4 border-t border-gray-700 hidden">
                     <h2 class="text-xl font-semibold text-indigo-300">Call Controls</h2>
                     <div class="flex gap-3">
                         <button id="video-btn" class="flex-1 py-3 bg-red-600 hover:bg-red-500 rounded-lg font-bold transition-all" onclick="toggleVideo()">
@@ -162,14 +175,16 @@
         </div>
     </div>
 
-    <!-- Firebase Imports -->
+    <!-- GAME.JS Logic (Internalized) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, where, getDocs, runTransaction, updateDoc, deleteDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, runTransaction, updateDoc, deleteDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        // Ensure necessary global variables are available
+        // --- Initialization and Global State Setup ---
+        
+        // Global variables provided by the environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
@@ -184,11 +199,12 @@
             board: ['', '', '', '', '', '', '', '', ''],
             players: { X: null, O: null },
             turn: 'X',
-            status: 'lobby', // 'lobby', 'waiting', 'playing', 'finished'
-            mode: 'lobby',   // NEW: 'lobby', 'online', 'vs_robot'
+            status: 'lobby',   // 'lobby', 'waiting', 'playing', 'finished'
+            mode: 'lobby',     // 'lobby', 'online', 'vs_robot'
             roomCode: null,
             isMyTurn: false,
-            mySymbol: null, // 'X' or 'O' (for online) or 'X' (for robot mode)
+            mySymbol: null, 
+            robotDifficulty: 'medium', // New state variable for robot level
             localStream: null,
             peerConnection: null,
             isCalling: false,
@@ -208,15 +224,17 @@
         window.copyRoomCode = function() {
             const roomCode = window.gameState.roomCode;
             if (roomCode) {
+                // Clipboard copy logic
                 navigator.clipboard.writeText(roomCode).then(() => {
                     console.log('Room code copied to clipboard!');
-                    // Instead of alert, change the button text briefly
                     const btn = document.getElementById('copy-btn');
                     const originalText = btn.innerHTML;
                     btn.innerHTML = '<i class="ph-check-bold chat-control-icon align-middle mr-1"></i> Copied!';
                     setTimeout(() => { btn.innerHTML = originalText; }, 1500);
                 }).catch(err => {
-                    console.error('Could not copy text: ', err);
+                    // Fallback for iFrame restrictions
+                    document.execCommand('copy');
+                    console.error('Could not copy text (used fallback): ', err);
                 });
             }
         };
@@ -245,18 +263,17 @@
 
         /** Updates the main UI elements based on the current game state. */
         function updateUI() {
-            const { board, turn, status, roomCode, mySymbol, isMyTurn, mode } = window.gameState;
+            const { board, turn, status, roomCode, mySymbol, isMyTurn, mode, robotDifficulty } = window.gameState;
             const gameStatusEl = document.getElementById('game-status');
             const roomDisplayEl = document.getElementById('room-display');
             const copyBtn = document.getElementById('copy-btn');
             const boardEl = document.getElementById('game-board');
-            const onlineControls = document.getElementById('online-controls');
             const mediaControls = document.getElementById('media-controls');
             const videoFeeds = document.getElementById('video-feeds');
 
             // 1. Mode/Room Status Display
             if (mode === 'vs_robot') {
-                roomDisplayEl.textContent = 'ROBOT MODE';
+                roomDisplayEl.textContent = `ROBOT (${robotDifficulty.toUpperCase()})`;
             } else if (roomCode) {
                 roomDisplayEl.textContent = roomCode;
             } else {
@@ -265,9 +282,14 @@
             copyBtn.classList.toggle('hidden', mode !== 'online' || !roomCode);
             
             // 2. Control Visibility
-            onlineControls.classList.toggle('hidden', mode !== 'lobby' && mode !== 'online');
-            mediaControls.classList.toggle('hidden', mode !== 'online');
-            videoFeeds.classList.toggle('hidden', mode === 'vs_robot');
+            const isOnlineMode = mode === 'online';
+            // Hide online controls once a game (robot or online) has started
+            const inLobby = mode === 'lobby';
+            document.getElementById('game-setup-controls').classList.toggle('hidden', !inLobby);
+            
+            // Show media controls and video feeds only in online mode
+            mediaControls.classList.toggle('hidden', !isOnlineMode);
+            videoFeeds.classList.toggle('hidden', !isOnlineMode); // FIX for Laptop screen space
 
             // 3. Board Rendering
             boardEl.innerHTML = board.map((cell, index) => 
@@ -281,7 +303,7 @@
             // 4. Status Message
             let statusText = 'Lobby: Select a game mode';
             let color = 'text-indigo-300';
-            const winner = checkWin(board); // Check win again for status display logic
+            const winner = checkWin(board); 
 
             if (mode === 'vs_robot') {
                 if (status === 'playing') {
@@ -295,16 +317,13 @@
                         statusText = 'Game Over: You Win!';
                         color = 'text-green-500';
                     } else {
-                        statusText = 'Game Over: Robot Wins!';
+                        statusText = `Game Over: Robot (${robotDifficulty.toUpperCase()}) Wins!`;
                         color = 'text-red-500';
                     }
                 }
-            } else if (mode === 'online') {
-                if (status === 'waiting' && mySymbol === 'X') {
-                    statusText = 'Waiting for Opponent to Join...';
-                    color = 'text-yellow-400';
-                } else if (status === 'waiting' && mySymbol === 'O') {
-                    statusText = 'Joining Room...';
+            } else if (isOnlineMode) {
+                if (status === 'waiting') {
+                    statusText = `Waiting for Player ${mySymbol === 'X' ? 'O' : 'X'} to Join...`;
                     color = 'text-yellow-400';
                 } else if (status === 'playing') {
                     if (isMyTurn) {
@@ -331,78 +350,81 @@
 
         // --- Robot AI Logic ---
 
-        /** Finds the best move for the robot ('O') using a simple Minimax-lite heuristic. */
-        function getRobotMove(board, robotSymbol) {
+        /** Finds the best move for the robot ('O') using selected difficulty. */
+        function getRobotMove(board, robotSymbol, difficulty) {
             const humanSymbol = robotSymbol === 'X' ? 'O' : 'X';
             const availableMoves = board.map((cell, index) => cell === '' ? index : null).filter(i => i !== null);
             
-            // Helper to check if a specific symbol can win on a given move
+            if (availableMoves.length === 0) return -1;
+            
+            // --- EASY MODE: Pure Random ---
+            if (difficulty === 'easy') {
+                return availableMoves[Math.floor(Math.random() * availableMoves.length)];
+            }
+
+            // --- MEDIUM/HARD MODE: Heuristic Logic ---
             function canWin(testBoard, symbol, moveIndex) {
-                // Temporarily place the move
-                testBoard[moveIndex] = symbol;
-                const winner = checkWin(testBoard);
-                testBoard[moveIndex] = ''; // Reset the board state
-                return winner === symbol;
+                const tempBoard = [...testBoard];
+                tempBoard[moveIndex] = symbol;
+                return checkWin(tempBoard) === symbol;
+            }
+            
+            // 1. Check for immediate robot win (Aggressive move)
+            for (const i of availableMoves) {
+                if (canWin(board, robotSymbol, i)) return i;
             }
 
-            // 1. Check for immediate robot win
-            for (const i of availableMoves) {
-                if (canWin([...board], robotSymbol, i)) {
-                    console.log("Robot: Winning move found at", i);
-                    return i;
-                }
+            // 2. Block immediate human win (Defensive move)
+            let shouldBlock = true;
+            if (difficulty === 'medium' && Math.random() < 0.3) {
+                // 30% chance Medium robot misses the block
+                shouldBlock = false;
             }
-
-            // 2. Block immediate human win
-            for (const i of availableMoves) {
-                if (canWin([...board], humanSymbol, i)) {
-                    console.log("Robot: Blocking human win at", i);
-                    return i;
+            
+            if (shouldBlock || difficulty === 'hard') {
+                for (const i of availableMoves) {
+                    if (canWin(board, humanSymbol, i)) return i;
                 }
             }
 
             // 3. Take the center (Index 4)
-            if (availableMoves.includes(4)) {
-                console.log("Robot: Taking center (4)");
-                return 4;
-            }
+            if (availableMoves.includes(4)) return 4;
 
             // 4. Take a corner (0, 2, 6, 8)
             const corners = [0, 2, 6, 8];
-            for (const i of corners) {
-                if (availableMoves.includes(i)) {
-                    console.log("Robot: Taking corner", i);
-                    return i;
-                }
+            const availableCorners = availableMoves.filter(i => corners.includes(i));
+            if (availableCorners.length > 0) {
+                // Choose a random available corner
+                return availableCorners[Math.floor(Math.random() * availableCorners.length)];
             }
 
             // 5. Take any remaining side spot (randomly)
-            if (availableMoves.length > 0) {
-                const move = availableMoves[Math.floor(Math.random() * availableMoves.length)];
-                console.log("Robot: Taking random side spot", move);
-                return move;
+            const sides = [1, 3, 5, 7];
+            const availableSides = availableMoves.filter(i => sides.includes(i));
+            if (availableSides.length > 0) {
+                return availableSides[Math.floor(Math.random() * availableSides.length)];
             }
 
-            return -1; // Should not happen in a valid game
+            return -1; 
         }
 
 
-        // --- Game Logic ---
+        // --- Game Flow Functions ---
 
         /** Starts a single-player game against the Robot. */
         window.startRobotGame = function() {
-            console.log("Starting Robot Game (Single Player)");
-            
-            // 1. Reset all states (will clean up any online connection)
             window.resetGame(false); 
             
-            // 2. Set single-player state
+            const difficultySelector = document.getElementById('robot-level');
+            const selectedDifficulty = difficultySelector ? difficultySelector.value : 'medium';
+
             window.gameState.mode = 'vs_robot';
-            window.gameState.mySymbol = 'X'; // Human is always X
+            window.gameState.mySymbol = 'X'; 
             window.gameState.players = { X: 'human', O: 'robot' };
             window.gameState.turn = 'X';
             window.gameState.isMyTurn = true;
             window.gameState.status = 'playing';
+            window.gameState.robotDifficulty = selectedDifficulty;
 
             updateUI();
         };
@@ -423,45 +445,41 @@
             let newTurn = mySymbol === 'X' ? 'O' : 'X';
             let newStatus = winner ? 'finished' : 'playing';
 
+            // Update local state temporarily for UI responsiveness
             window.gameState.board = newBoard;
             window.gameState.turn = newTurn;
             window.gameState.status = newStatus;
             window.gameState.isMyTurn = false;
-            updateUI(); // Immediate UI update for human move
-
+            updateUI(); 
 
             if (mode === 'vs_robot') {
-                if (newStatus === 'finished') {
-                    return; // Game ended after human move
-                }
+                if (newStatus === 'finished') return; 
                 
                 // Set turn display to Robot's turn
                 window.gameState.turn = 'O';
                 updateUI(); 
 
-                // Wait for a second for a human-like delay
                 await new Promise(r => setTimeout(r, 700));
 
                 // --- ROBOT MOVE ---
-                const robotSymbol = window.gameState.players.O === 'robot' ? 'O' : 'X';
-                const robotMoveIndex = getRobotMove(newBoard, robotSymbol);
+                const robotSymbol = 'O'; 
+                const robotMoveIndex = getRobotMove(newBoard, robotSymbol, window.gameState.robotDifficulty);
 
                 if (robotMoveIndex !== -1) {
                     newBoard[robotMoveIndex] = robotSymbol;
                     winner = checkWin(newBoard);
-                    newTurn = mySymbol; // Back to human's turn
+                    newTurn = mySymbol; 
                     newStatus = winner ? 'finished' : 'playing';
 
                     window.gameState.board = newBoard;
                     window.gameState.turn = newTurn;
                     window.gameState.status = newStatus;
-                    window.gameState.isMyTurn = (newStatus === 'playing'); // Set back to human turn if not finished
+                    window.gameState.isMyTurn = (newStatus === 'playing'); 
                     updateUI();
                 }
 
             } else if (mode === 'online') {
-                // Online mode (original Firestore logic)
-                const remoteId = mySymbol === 'X' ? window.gameState.players.O : window.gameState.players.X;
+                // Online mode: Send move to Firestore
                 const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'xogames', window.gameState.roomCode);
 
                 try {
@@ -470,21 +488,19 @@
                         turn: newTurn,
                         status: newStatus,
                         winner: winner || null,
-                        [`webrtc_${remoteId}`]: arrayRemove({ type: 'offer' }, { type: 'answer' }, { type: 'candidate' })
+                        // CRITICAL FIX: Removed arrayRemove/arrayUnion here to ensure
+                        // WebRTC signaling is not interrupted by game moves.
                     }, { merge: true });
                 } catch (error) {
                     console.error("Error updating game state (Online mode):", error);
-                    // In a real app, you would handle reverting the local state or showing an error modal
                 }
             }
         };
 
         /** Subscribes to the game document for real-time updates (Online Mode Only). */
         function subscribeToGame(roomCode) {
-            if (unsubscribeGame) {
-                unsubscribeGame();
-            }
-            window.gameState.mode = 'online'; // Ensure mode is set to online
+            if (unsubscribeGame) unsubscribeGame();
+            window.gameState.mode = 'online'; 
             
             const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'xogames', roomCode);
 
@@ -497,44 +513,50 @@
                 
                 const data = docSnap.data();
                 
-                // Update local state from Firestore
                 window.gameState.board = data.board || window.gameState.board;
                 window.gameState.turn = data.turn || 'X';
                 window.gameState.status = data.status || 'playing';
                 window.gameState.players = data.players || { X: null, O: null };
                 
-                // Determine player role and turn
                 const { players, turn, status } = window.gameState;
                 window.gameState.mySymbol = players.X === userId ? 'X' : players.O === userId ? 'O' : null;
                 window.gameState.isMyTurn = (window.gameState.mySymbol && turn === window.gameState.mySymbol && status === 'playing');
                 window.gameState.remotePlayerId = window.gameState.mySymbol === 'X' ? players.O : players.X;
                 
-                console.log("Game state updated. My symbol:", window.gameState.mySymbol, "Turn:", turn, "Is my turn:", window.gameState.isMyTurn);
-                
                 updateUI();
                 
-                // Handle WebRTC Signaling (Offers/Answers/Candidates)
-                handleSignaling(data);
+                // Only handle signaling if both players are present
+                if (players.X && players.O) {
+                    handleSignaling(data);
+                }
 
             }, (error) => {
                 console.error("Error listening to game state:", error);
             });
             
-            console.log("Subscribed to room:", roomCode);
-            window.gameState.roomCode = roomCode;
+            // Note: window.gameState.roomCode is already set in createRoom/joinRoom
         }
 
         /** Creates a new game room (Online Mode Only). */
         window.createRoom = async function() {
-            // Ensure mode is reset before starting online game
             window.resetGame(false); 
 
             const newCode = generateRoomCode();
             const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'xogames', newCode);
 
-            if (!userId) { console.error("User not authenticated."); return; }
+            // FIX: Check for userId availability and give better feedback
+            if (!userId) { 
+                document.getElementById('game-status').textContent = 'Error: Authentication not complete. Please wait a moment.';
+                console.error("User not authenticated."); 
+                return; 
+            }
 
             try {
+                // FIX: Set local roomCode immediately for responsive UI update
+                window.gameState.roomCode = newCode;
+                window.gameState.mySymbol = 'X';
+                window.gameState.status = 'waiting';
+
                 await setDoc(roomDocRef, {
                     board: ['', '', '', '', '', '', '', '', ''],
                     players: { X: userId, O: null },
@@ -542,28 +564,31 @@
                     status: 'waiting',
                     winner: null,
                     createdAt: new Date().getTime(),
+                    // Initialize signaling arrays
+                    [`webrtc_${userId}`]: [],
                 });
                 
-                console.log("Room created:", newCode);
-                window.gameState.mySymbol = 'X';
-                window.gameState.status = 'waiting';
                 subscribeToGame(newCode);
+                updateUI(); // Immediate UI update to show room code
 
             } catch (error) {
                 console.error("Error creating room:", error);
-                alert("Failed to create room.");
+                document.getElementById('game-status').textContent = 'Error: Failed to create room. Check Firestore permissions.';
             }
         };
 
         /** Joins an existing game room (Online Mode Only). */
         window.joinRoom = async function(roomCode) {
-            if (!roomCode || roomCode.length < 6) { alert("Please enter a valid room code."); return; }
+            roomCode = roomCode.toUpperCase().trim();
+            if (!roomCode || roomCode.length < 6) { 
+                document.getElementById('game-status').textContent = 'Please enter a valid 6-character room code.';
+                return;
+            }
             const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'xogames', roomCode);
 
             if (!userId) { console.error("User not authenticated."); return; }
 
             try {
-                // Use a transaction to safely update the player list
                 await runTransaction(db, async (transaction) => {
                     const docSnap = await transaction.get(roomDocRef);
 
@@ -575,25 +600,25 @@
                     if (data.players.O) {
                         throw new Error("Room is already full.");
                     }
+                    if (data.players.X === userId) {
+                        throw new Error("You are already Player X in this room.");
+                    }
 
-                    // Player O joins
                     transaction.update(roomDocRef, {
                         'players.O': userId,
-                        status: 'playing'
+                        status: 'playing',
+                        // Initialize signaling array for the joining player
+                        [`webrtc_${userId}`]: [], 
                     });
                 });
 
-                console.log("Room joined:", roomCode);
                 window.gameState.mySymbol = 'O';
                 window.gameState.status = 'playing';
                 subscribeToGame(roomCode);
-                
-                // If we join, we initiate the WebRTC connection if Player X hasn't already.
-                startCall(true); 
 
             } catch (error) {
                 console.error("Error joining room:", error.message);
-                alert(error.message);
+                document.getElementById('game-status').textContent = `Error joining: ${error.message}`;
             }
         };
 
@@ -601,33 +626,29 @@
         window.resetGame = async function(shouldResetRemote = true) {
             const { roomCode, mySymbol, mode } = window.gameState;
             
-            // 1. Unsubscribe from old room
             if (unsubscribeGame) { unsubscribeGame(); unsubscribeGame = null; }
-            
-            // 2. Clear call
             endCall();
 
-            // 3. Delete the room from Firestore (only if mode was online and you were X)
             if (shouldResetRemote && roomCode && mySymbol === 'X' && mode === 'online') {
                 try {
                     const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'xogames', roomCode);
                     await deleteDoc(roomDocRef);
-                    console.log("Room deleted successfully:", roomCode);
                 } catch (error) {
                     console.error("Could not delete room:", error);
                 }
             }
             
-            // 4. Reset local state
+            // Reset local state to initial values
             window.gameState = {
                 board: ['', '', '', '', '', '', '', '', ''],
                 players: { X: null, O: null },
                 turn: 'X',
                 status: 'lobby',
-                mode: 'lobby', // Reset mode to lobby
+                mode: 'lobby', 
                 roomCode: null,
                 isMyTurn: false,
                 mySymbol: null,
+                robotDifficulty: 'medium', // Reset to default
                 localStream: null,
                 peerConnection: null,
                 isCalling: false,
@@ -659,10 +680,7 @@
 
         /** Starts media stream and enables call controls. */
         window.startMediaAndCall = async function() {
-            if (window.gameState.isCalling) {
-                console.log("Call already started.");
-                return;
-            }
+            if (window.gameState.isCalling) return;
             
             try {
                 window.gameState.localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
@@ -670,24 +688,23 @@
                 window.gameState.isCalling = true;
                 
                 // Update UI for media controls
-                videoBtn.classList.remove('bg-red-600');
-                videoBtn.classList.add('bg-green-600');
+                videoBtn.classList.replace('bg-red-600', 'bg-green-600');
                 videoBtn.innerHTML = '<i class="ph-video-camera-bold chat-control-icon align-middle mr-2"></i> Video ON';
                 
-                audioBtn.classList.remove('bg-red-600');
-                audioBtn.classList.add('bg-green-600');
+                audioBtn.classList.replace('bg-red-600', 'bg-green-600');
                 audioBtn.innerHTML = '<i class="ph-microphone-bold chat-control-icon align-middle mr-2"></i> Audio ON';
                 
                 startCallBtn.classList.add('hidden');
 
-                // If a game is active, try to establish the P2P connection
                 if (window.gameState.mode === 'online' && window.gameState.roomCode && window.gameState.status === 'playing') {
-                    startCall(true); // Player starting media is effectively the caller if connection hasn't started
+                    // O is the caller in this implementation, which handles the joining process.
+                    const isCaller = window.gameState.mySymbol === 'O'; 
+                    startCall(isCaller); 
                 }
 
             } catch (err) {
                 console.error("Error accessing media devices:", err);
-                alert("Could not access camera/microphone. Please check permissions.");
+                document.getElementById('game-status').textContent = "Error: Could not access camera/microphone. Check permissions.";
                 window.gameState.isCalling = false;
             }
         };
@@ -720,46 +737,47 @@
                 : '<i class="ph-microphone-slash-bold chat-control-icon align-middle mr-2"></i> Audio OFF';
         };
         
-        /** Starts the WebRTC peer connection. */
+        /** Starts the WebRTC peer connection (requires media stream to be running). */
         async function startCall(isCaller = false) {
             if (!window.gameState.localStream || !window.gameState.roomCode || !window.gameState.remotePlayerId) {
-                 console.log("Cannot start call yet (missing stream/room/opponent).");
-                 return;
+                console.warn("Cannot start call: Media stream not running or room data incomplete.");
+                return;
             }
 
-            // Clean up any existing connection
+            // Close existing connection to prevent re-use issues
             if (window.gameState.peerConnection) {
                 window.gameState.peerConnection.close();
+                window.gameState.peerConnection = null;
             }
 
             window.gameState.peerConnection = new RTCPeerConnection(servers);
             const pc = window.gameState.peerConnection;
             
-            // 1. Handle incoming remote streams
+            // Handle remote track/stream
             pc.ontrack = (event) => {
-                console.log("Received remote stream track.");
                 if (remoteVideo.srcObject !== event.streams[0]) {
                     remoteVideo.srcObject = event.streams[0];
                 }
             };
             
-            // 2. Add local tracks to the connection
+            // Add local tracks
             window.gameState.localStream.getTracks().forEach(track => {
                 pc.addTrack(track, window.gameState.localStream);
             });
             
-            // 3. Collect and send ICE candidates (crucial for connection)
+            // Handle ICE candidates
             pc.onicecandidate = (event) => {
                 if (event.candidate) {
-                    sendSignalingData({ type: 'candidate', candidate: event.candidate });
+                    sendSignalingData({ type: 'candidate', candidate: event.candidate.toJSON() });
                 }
             };
             
-            // 4. Caller creates Offer (Player 'X' or Player 'O' if joining and initiating call)
+            // Create and send offer if we are the caller (Player O)
             if (isCaller) {
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 sendSignalingData({ type: 'offer', sdp: pc.localDescription.sdp });
+                console.log("WebRTC: Sent Offer.");
             }
         }
         
@@ -770,11 +788,9 @@
 
             const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'xogames', roomCode);
             const remoteField = `webrtc_${remotePlayerId}`;
-
-            console.log(`Sending ${data.type} to ${remotePlayerId}`);
             
             try {
-                // Use arrayUnion to push signaling messages to the opponent's dedicated field
+                // Use arrayUnion to safely append the signal data
                 await updateDoc(roomDocRef, {
                     [remoteField]: arrayUnion(data)
                 });
@@ -796,27 +812,27 @@
             for (const signal of signals) {
                 try {
                     if (signal.type === 'offer') {
-                        // 1. Create peer connection if not exists and start media
-                        if (!pc) {
-                            // Automatically start media if an offer is received (acting as answerer)
+                        // If we receive an offer, we must ensure media is running and PC is set up
+                        if (!window.gameState.isCalling) {
                             await window.startMediaAndCall(); 
-                            await startCall(false); // Create PC, but don't create offer
+                            await startCall(false); // Initialize PC but not as caller
                         }
 
-                        // 2. Set remote description and create answer
-                        await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signal.sdp }));
-                        const answer = await pc.createAnswer();
-                        await pc.setLocalDescription(answer);
-                        sendSignalingData({ type: 'answer', sdp: pc.localDescription.sdp });
+                        if (pc) {
+                            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signal.sdp }));
+                            const answer = await pc.createAnswer();
+                            await pc.setLocalDescription(answer);
+                            sendSignalingData({ type: 'answer', sdp: pc.localDescription.sdp });
+                            console.log("WebRTC: Sent Answer.");
+                        }
 
                     } else if (signal.type === 'answer') {
-                        // Set remote description for the offerer
                         if (pc && pc.remoteDescription === null) {
                              await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: signal.sdp }));
+                             console.log("WebRTC: Received and set Answer.");
                         }
 
                     } else if (signal.type === 'candidate') {
-                        // Add ICE candidate
                         if (pc) {
                             await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
                         }
@@ -826,12 +842,10 @@
                 }
             }
             
-            // Clear processed signals from Firestore atomically
+            // Clear the processed signals from our array atomically
             if (signals.length > 0) {
                 try {
-                    await updateDoc(roomDocRef, {
-                        [myField]: []
-                    });
+                    await updateDoc(roomDocRef, { [myField]: [] });
                 } catch (error) {
                     console.error("Failed to clear signaling data:", error);
                 }
@@ -845,23 +859,18 @@
                 window.gameState.localStream = null;
                 localVideo.srcObject = null;
             }
-            if (remoteVideo.srcObject) {
-                remoteVideo.srcObject = null;
-            }
+            if (remoteVideo.srcObject) remoteVideo.srcObject = null;
             if (window.gameState.peerConnection) {
                 window.gameState.peerConnection.close();
                 window.gameState.peerConnection = null;
             }
             window.gameState.isCalling = false;
             
-            // Reset button UI
             startCallBtn.classList.remove('hidden');
-            videoBtn.classList.remove('bg-green-600');
-            videoBtn.classList.add('bg-red-600');
+            videoBtn.classList.replace('bg-green-600', 'bg-red-600');
             videoBtn.innerHTML = '<i class="ph-video-camera-slash-bold chat-control-icon align-middle mr-2"></i> Video OFF';
             
-            audioBtn.classList.remove('bg-green-600');
-            audioBtn.classList.add('bg-red-600');
+            audioBtn.classList.replace('bg-green-600', 'bg-red-600');
             audioBtn.innerHTML = '<i class="ph-microphone-slash-bold chat-control-icon align-middle mr-2"></i> Audio OFF';
         }
 
@@ -870,14 +879,12 @@
 
         window.onload = async function() {
             try {
-                // Initialize Firebase
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
                 setLogLevel('debug');
 
-                // Authentication
                 const authPromise = new Promise((resolve) => {
                     const unsubscribe = onAuthStateChanged(auth, async (user) => {
                         if (user) {
@@ -895,15 +902,12 @@
                 });
                 await authPromise;
                 
-                // Update User Info Display
                 document.getElementById('user-info').textContent = `User ID: ${userId.substring(0, 8)}... (Online services require this ID)`;
-
-                // Render the board and initial UI (Lobby Mode)
                 updateUI();
 
             } catch (error) {
                 console.error("Initialization Error:", error);
-                document.getElementById('game-status').textContent = 'Error: Check console for details.';
+                document.getElementById('game-status').textContent = 'Error: Initialization failed. Check console.';
             }
         };
 
